@@ -6,6 +6,7 @@
 #include<unistd.h>	//write
 #include <sys/ipc.h> 
 #include <sys/shm.h>   // shared memeory
+#include<pthread.h> //for threading , link with lpthread
 
 void connect_backend_server(int); 
  char* roundRobin();
@@ -270,20 +271,68 @@ puts("listining for the incoming requests");
 //accepting incoming requests
 
 int c = sizeof( struct sockaddr_in);
-
 int new_socket;
 struct sockaddr_in client;
+int fork_value;
+	
+// fork to run two process parallel
+fork_value= fork();
 
+//child
+if(fork_value==0){
+    pthread_t tid; 
+
+int i;
+
+// calling healthcheck after every 5 sec 
+  while(1){
+    for(i=0;i<total_server;i++)
+      pthread_create(&tid, NULL, healthCheck,(void *)i); 
+ sleep(5);
+}
+
+}
+
+if(fork_value!=0){
+// accepting incoming client request
 while((new_socket = accept(socket_descreptor ,(struct sockaddr *)&client, (socklen_t *)&c))){
   
       puts("request accepted");
 
-      // connet to the back end server
-      connect_backend_server(new_socket);
+     
 
-      
+       pthread_t sniffer_thread;
+
+       new_sock = malloc(1);
+       *new_sock = new_socket;
+
+      if( pthread_create( &sniffer_thread , NULL ,  connection_handler , (void*)new_sock) < 0)
+		{
+			perror("could not create thread");
+			return 1;
+		}
+		
+
 }
+
+ if(new_socket<0)
+  {
+      puts("request accept failed");
+      return 0;
+}
+
+}
+	
 shmctl(shmid, IPC_RMID, NULL);
 return 0;
 
 }
+
+void *connection_handler(void *socket_desc){
+
+	int sock = *(int*)socket_desc;
+
+         connect_backend_server(sock);
+
+}
+
